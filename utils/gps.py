@@ -1,14 +1,36 @@
-import geocoder
+import streamlit as st
+from streamlit_js_eval import streamlit_js_eval
 
 def get_gps():
-    """Get real location from IP/WiFi — works without browser permission"""
+    """Get real GPS from browser using HTTPS — works on Streamlit Cloud"""
     try:
-        g = geocoder.ip('me')
-        if g.latlng and len(g.latlng) == 2:
-            lat, lng = g.latlng
-            print(f"GPS: {lat}, {lng}")
-            return float(lat), float(lng)
+        coords = streamlit_js_eval(
+            js_expressions="""
+            await new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                    resolve(null);
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    pos => resolve({
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy
+                    }),
+                    err => resolve(null),
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+                );
+            })
+            """,
+            key="gps_location"
+        )
+        if coords and isinstance(coords, dict) and coords.get("lat"):
+            lat = float(coords["lat"])
+            lng = float(coords["lng"])
+            acc = coords.get("accuracy", 0)
+            print(f"Browser GPS: {lat}, {lng} (accuracy: {acc}m)")
+            return lat, lng
     except Exception as e:
         print(f"GPS error: {e}")
-    # Fallback
+    # Fallback to Amaravati
     return 16.4308, 80.5682
