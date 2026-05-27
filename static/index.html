@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PotholeAI</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0d1117; color:#e6edf3; font-family:sans-serif; }
+.header { background:linear-gradient(90deg,#f97316,#ef4444);
+          padding:1rem; text-align:center;
+          font-size:1.4rem; font-weight:800; letter-spacing:3px; }
+#video { width:100%; max-height:50vh; object-fit:cover; }
+#canvas { display:none; }
+.status { padding:1rem; text-align:center; font-size:1.1rem;
+          font-weight:600; margin:0.5rem; border-radius:8px; }
+.ok  { background:rgba(34,197,94,0.15); border:1px solid #22c55e; color:#86efac; }
+.bad { background:rgba(239,68,68,0.15); border:1px solid #ef4444; color:#fca5a5; }
+.info { background:rgba(249,115,22,0.15); border:1px solid #f97316; color:#fdba74; }
+#gps  { font-size:0.75rem; color:#6e7681; text-align:center; padding:0.3rem; }
+#map  { width:100%; height:40vh; border:none; }
+</style>
+</head>
+<body>
+
+<div class="header">🚧 POTHOLEAI</div>
+<div id="gps">📍 Getting GPS...</div>
+
+<video id="video" autoplay playsinline muted></video>
+<canvas id="canvas"></canvas>
+
+<div id="status" class="status info">Starting camera...</div>
+<div id="map-container">
+  <iframe id="map" src="/map"></iframe>
+</div>
+
+<script>
+const API = window.location.origin;
+let lat = 16.3067, lng = 80.4365;
+let detecting = false;
+
+navigator.geolocation.watchPosition(
+  pos => {
+    lat = pos.coords.latitude;
+    lng = pos.coords.longitude;
+    document.getElementById('gps').textContent =
+      '📍 ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+  },
+  err => {
+    document.getElementById('gps').textContent = '📍 GPS unavailable — using default';
+  },
+  { enableHighAccuracy: true, maximumAge: 5000 }
+);
+
+const video  = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+const status = document.getElementById('status');
+
+navigator.mediaDevices.getUserMedia({
+  video: { facingMode: 'environment', width: 640, height: 480 },
+  audio: false
+}).then(stream => {
+  video.srcObject = stream;
+  video.onloadedmetadata = () => {
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    status.className = 'status ok';
+    status.textContent = '✅ Camera ready — detecting...';
+    detectLoop();
+  };
+}).catch(err => {
+  status.className = 'status bad';
+  status.textContent = '❌ Camera error: ' + err.message;
+});
+
+async function detectLoop() {
+  if (detecting) return;
+  detecting = true;
+
+  ctx.drawImage(video, 0, 0);
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.8));
+  const form = new FormData();
+  form.append('image', blob, 'frame.jpg');
+  form.append('lat', lat);
+  form.append('lng', lng);
+
+  try {
+    const res  = await fetch(API + '/detect', { method:'POST', body:form });
+    const data = await res.json();
+    if (data.count > 0) {
+      status.className = 'status bad';
+      status.textContent =
+        '🚨 ' + data.count + ' POTHOLE(S) DETECTED! — ' + Math.round(data.confidence*100) + '% confidence';
+      document.getElementById('map').src = '/map?t=' + Date.now();
+    } else {
+      status.className = 'status ok';
+      status.textContent = '✅ Road Clear';
+    }
+  } catch(e) {
+    console.error(e);
+  }
+
+  detecting = false;
+  setTimeout(detectLoop, 1000);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+path: /Users/kanishkravipati/Documents/pothole_app/dataset
+train: images/train
+val: images/val
+nc: 1
+names: ['pothole']
