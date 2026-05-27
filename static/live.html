@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PotholeAI</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#0d1117;color:#e6edf3;font-family:sans-serif;}
+.header{background:linear-gradient(90deg,#f97316,#ef4444);padding:12px 20px;
+        display:flex;justify-content:space-between;align-items:center;}
+.header h1{font-size:1.3rem;font-weight:800;letter-spacing:3px;color:white;}
+.header .gps{font-size:0.75rem;color:rgba(255,255,255,0.8);}
+.main{display:grid;grid-template-columns:1fr 1fr;height:calc(100vh - 50px);}
+.cam-panel{display:flex;flex-direction:column;padding:12px;gap:8px;}
+.map-panel{padding:12px;}
+#videostream{width:100%;border-radius:8px;background:#161b22;
+             min-height:200px;object-fit:cover;}
+.controls{display:flex;gap:8px;}
+.btn{flex:1;padding:10px;border:none;border-radius:8px;
+     font-size:1rem;font-weight:700;cursor:pointer;}
+.btn-start{background:linear-gradient(90deg,#f97316,#ef4444);color:white;}
+.btn-stop{background:#30363d;color:#e6edf3;}
+.status{padding:12px;border-radius:8px;text-align:center;font-weight:600;}
+.status-ok{background:rgba(34,197,94,0.15);border:1px solid #22c55e;color:#86efac;}
+.status-bad{background:rgba(239,68,68,0.15);border:1px solid #ef4444;color:#fca5a5;
+            animation:pulse 1s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+.stats{display:flex;gap:8px;}
+.stat{flex:1;background:#161b22;border:1px solid #30363d;border-radius:8px;
+      padding:8px;text-align:center;}
+.stat-val{font-size:1.4rem;font-weight:700;color:#f97316;}
+.stat-label{font-size:0.7rem;color:#6e7681;margin-top:2px;}
+#map{width:100%;height:100%;border-radius:8px;}
+@media(max-width:600px){
+  .main{grid-template-columns:1fr;}
+  .map-panel{height:40vh;}
+}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🚧 POTHOLEAI</h1>
+  <div class="gps" id="gpsDisplay">📍 Getting GPS...</div>
+</div>
+<div class="main">
+  <div class="cam-panel">
+    <img id="videostream" src="" alt="Camera feed will appear here after START"/>
+    <div class="controls">
+      <button class="btn btn-start" onclick="startDetection()">▶ START</button>
+      <button class="btn btn-stop"  onclick="stopDetection()">⏹ STOP</button>
+    </div>
+    <div class="status status-ok" id="statusBox">📷 Press START to begin</div>
+    <div class="stats">
+      <div class="stat"><div class="stat-val" id="totalCount">0</div><div class="stat-label">Total Saved</div></div>
+      <div class="stat"><div class="stat-val" id="highCount">0</div><div class="stat-label">🔴 High</div></div>
+      <div class="stat"><div class="stat-val" id="medCount">0</div><div class="stat-label">🟠 Medium</div></div>
+      <div class="stat"><div class="stat-val" id="lowCount">0</div><div class="stat-label">🟡 Low</div></div>
+    </div>
+  </div>
+  <div class="map-panel">
+    <div id="map"></div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let lat = 16.3067, lng = 80.4365;
+let map, userMarker;
+let statusInterval, mapInterval;
+
+// GPS
+navigator.geolocation.watchPosition(pos => {
+  lat = pos.coords.latitude;
+  lng = pos.coords.longitude;
+  document.getElementById('gpsDisplay').textContent =
+    '📍 ' + lat.toFixed(5) + ', ' + lng.toFixed(5) + ' (Live)';
+}, err => {
+  document.getElementById('gpsDisplay').textContent = '📍 Default location';
+}, {enableHighAccuracy: true, maximumAge: 3000});
+
+// Map
+map = L.map('map').setView([16.3067, 80.4365], 15);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  {attribution:'Esri'}).addTo(map);
+userMarker = L.marker([16.3067, 80.4365]).addTo(map).bindPopup('📍 You are here');
+
+function startDetection() {
+  fetch(API + '/start', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({lat, lng})
+  });
+  document.getElementById('videostream').src = API + '/video';
+  statusInterval = setInterval(updateStatus, 500);
+  mapInterval    = setInterval(updateMap, 5000);
+  updateMap();
+}
+
+function stopDetection() {
+  fetch(API + '/stop', {method:'POST'});
+  document.getElementById('videostream').src = '';
+  clearInterval(statusInterval);
+  clearInterval(mapInterval);
+  document.getElementById('statusBox').className = 'status status-ok';
+  document.getElementById('statusBox').textContent = '📷 Press START to begin';
+}
+
+async function updateStatus() {
+  try {
+    const r = await fetch(API + '/status');
+    const d = await r.json();
+    const box = document.getElementById('statusBox');
+    if (d.status === 'pothole') {
+      box.className = 'status status-bad';
+      box.textContent = '🚨 ' + d.msg + ' — Slow down!';
+    } else if (d.status === 'clear') {
+      box.className = 'status status-ok';
+      box.textContent = '✅ Road Clear';
+    }
+    document.getElementById('totalCount').textContent = d.total;
+    // Update user marker
+    if (lat !== 16.3067) {
+      userMarker.setLatLng([lat, lng]);
+      map.panTo([lat, lng]);
+    }
+  } catch(e) {}
+}
+
+async function updateMap() {
+  try {
+    const r = await fetch(API + '/potholes');
+    const potholes = await r.json();
+    const colors = {High:'#ef4444', Medium:'#f97316', Low:'#eab308'};
+    let high=0, med=0, low=0;
+    potholes.forEach(p => {
+      const color = colors[p.severity] || '#f97316';
+      L.circleMarker([p.lat, p.lng], {
+        radius:10, color:color, fillColor:color, fillOpacity:0.85
+      }).addTo(map).bindTooltip(p.severity + ' — ' + Math.round(p.confidence*100) + '%');
+      if(p.severity==='High') high++;
+      else if(p.severity==='Medium') med++;
+      else low++;
+    });
+    document.getElementById('highCount').textContent = high;
+    document.getElementById('medCount').textContent  = med;
+    document.getElementById('lowCount').textContent  = low;
+  } catch(e) {}
+}
+</script>
+</body>
+</html>
