@@ -5,3 +5,5 @@ Pillow
 pymongo
 folium
 ultralytics
+streamlit
+streamlit-folium
