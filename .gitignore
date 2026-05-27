@@ -1,7 +1,5 @@
-# Model files (too large for GitHub)
 *.pt
 *.weights
-*.pt
 runs/
 dataset/
 .venv/
@@ -10,4 +8,3 @@ __pycache__/
 .DS_Store
 key.pem
 cert.pem
-*.egg-info/
