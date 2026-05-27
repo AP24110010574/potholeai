@@ -1,11 +1,7 @@
-streamlit
+flask
 opencv-python-headless
 numpy
 Pillow
 pymongo
 folium
-streamlit-folium
 ultralytics
-geocoder
-streamlit-js-eval
-python-dotenv
