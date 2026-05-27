@@ -1,7 +1,8 @@
-import streamlit as st
-import numpy as np
 import cv2
+import numpy as np
 from datetime import datetime
+import streamlit as st
+import os
 
 CONFIDENCE_THRESHOLD = 0.25
 COLOR_HIGH   = (239, 68,  68)
@@ -12,11 +13,19 @@ COLOR_LOW    = (234, 179,  8)
 def load_model():
     try:
         from ultralytics import YOLO
-        try:
-            model = YOLO("pothole_model.pt")
-        except Exception:
-            model = YOLO("yolov8n.pt")
-        return model
+        # Try local model first
+        model_paths = [
+            "pothole_model.pt",
+            "runs/detect/pothole_trained-2/weights/best.pt",
+            "runs/detect/pothole_trained/weights/best.pt",
+        ]
+        for path in model_paths:
+            if os.path.exists(path):
+                print(f"Loading model from {path}")
+                return YOLO(path)
+        # Fallback to base YOLOv8
+        print("No trained model found, using base YOLOv8n")
+        return YOLO("yolov8n.pt")
     except Exception as e:
         st.error(f"Model load error: {e}")
         return None
